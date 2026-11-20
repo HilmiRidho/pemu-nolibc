@@ -44,8 +44,16 @@ case "$ARCH" in
   aarch64|arm64) echo "build.sh: aarch64 host: compiles with no libc header (checked by cross-compiling), long double math is host/rt/rt_quad.h (checked on x86_64), but the aarch64 code of host/rt/ has NOT run on real hardware yet" >&2 ;;
   *) echo "build.sh: unsupported ARCH '$ARCH' (x86_64 and aarch64 hosts)" >&2; exit 1 ;;
 esac
-LDS="-static-pie -fPIE -nostdlib -nostdinc -I$(pwd)/host/abi/include -U_FORTIFY_SOURCE -fno-math-errno -fno-stack-protector -falign-functions=64 -falign-jumps=16"
+# aarch64 distro gcc (Debian 12) and recent clang call the LSE "outline atomics" helpers in libgcc.a / compiler-rt, whose lse-init.o constructor needs
+# __getauxval from a libc: not linked here.  Inline LL/SC atomics instead (the JIT picks its own LSE paths at run time).  Probed: x86_64 gcc has no such flag.
+NOOA=""
+echo 'int x;' | $CC -Werror -mno-outline-atomics -x c -c - -o /dev/null 2>/dev/null && NOOA="-mno-outline-atomics"
+LDS="-static-pie -fPIE -nostdlib -nostdinc -I$(pwd)/host/abi/include -U_FORTIFY_SOURCE -fno-math-errno -fno-stack-protector -falign-functions=64 -falign-jumps=16 $NOOA"
+# The compiler's runtime library: libgcc.a for gcc, libclang_rt.builtins-*.a for clang with compiler-rt (Android NDK has no libgcc.a, so -lgcc fails there).
+# Ask the compiler for its file; fall back to -lgcc when it names none that exists.
 MATH="-lgcc"
+LIBRT=$($CC -print-libgcc-file-name 2>/dev/null) || LIBRT=""
+[ -n "$LIBRT" ] && [ -f "$LIBRT" ] && MATH="$LIBRT"
 VERDEF="-DPEMU_RELEASE=\"$(tr -d ' \n' < VERSION)\""   # single source of truth: ./VERSION
 mkdir -p "$OUT"
 # host/pemu_hop.h (the table of HOP_ host operations) is generated from the names src/ uses: it must be current

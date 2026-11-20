@@ -185,6 +185,7 @@ unsigned long getauxval(unsigned long type) {
     for (Elf64_auxv_t *a = rt_auxv_all; a && a->a_type != AT_NULL; a++) if (a->a_type == type) return a->a_un.a_val;
     errno = ENOENT; return 0;
 }
+unsigned long __getauxval(unsigned long type) { return getauxval(type); }   /* libgcc.a's lse-init.o (aarch64 outline atomics) calls this name */
 static void (*rt_atexit_fn[32])(void); static int rt_atexit_n;
 int atexit(void (*f)(void)) { if (rt_atexit_n >= 32) return -1; rt_atexit_fn[rt_atexit_n++] = f; return 0; }
 void rt_stdio_flush_all(void); int rt_wr_all(int, const void *, size_t); int snprintf(char *, size_t, const char *, ...);
