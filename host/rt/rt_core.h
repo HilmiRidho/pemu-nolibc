@@ -199,13 +199,13 @@ void exit(int c) { while (rt_atexit_n > 0) rt_atexit_fn[--rt_atexit_n](); rt_std
 
 size_t strlen(const char *); int strcmp(const char *, const char *);
 int main(int, char **);
-extern const Elf64_Ehdr __ehdr_start __attribute__((visibility("hidden")));
+extern Elf64_Ehdr __ehdr_start __attribute__((visibility("hidden")));
 extern Elf64_Dyn _DYNAMIC[] __attribute__((visibility("hidden")));
 
 /* static-pie: nobody applies the relative relocations for us.  _start calls this BEFORE entering any other C function: the compiler may hoist a GOT load
  * (memset / memcpy libcalls with -fno-plt, function pointers) above a call made from inside rt_start_c, and then it reads the GOT slot unrelocated (0). */
 static RT_NOINLINE RT_ATTR_USED void rt_relocate(void) {
-    char *base = (char *) &__ehdr_start;
+    char *base = (char *) &__ehdr_start; __asm__ volatile("" : "+r"(base) :: "memory");
     const Elf64_Rela *rela = 0; size_t sz = 0, ent = sizeof(Elf64_Rela);
     for (const Elf64_Dyn *d = _DYNAMIC; d->d_tag != DT_NULL; d++) {
         if (d->d_tag == DT_RELA) rela = (const Elf64_Rela *) (base + d->d_un.d_ptr);
@@ -267,7 +267,7 @@ RT_ATTR_USED static void rt_start_c(long *sp) {
     /* rt_relocate() already ran, from _start (below), before any C code of this function */
     int argc = (int) sp[0]; char **argv = (char **) (sp + 1), **envp = argv + argc + 1, **e = envp;
     while (*e) e++;
-    const Elf64_Phdr *ph = 0; size_t phn = 0; char *base = (char *) &__ehdr_start;
+    const Elf64_Phdr *ph = 0; size_t phn = 0; char *base = (char *) &__ehdr_start; __asm__ volatile("" : "+r"(base) :: "memory");
     rt_auxv_all = (Elf64_auxv_t *) (e + 1);
     for (Elf64_auxv_t *a = (Elf64_auxv_t *) (e + 1); a->a_type != AT_NULL; a++) {
         if (a->a_type == AT_PHDR) ph = (const Elf64_Phdr *) a->a_un.a_val;
