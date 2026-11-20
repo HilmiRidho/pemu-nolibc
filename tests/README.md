@@ -10,6 +10,7 @@
 |---|---|---|
 | `unit/test_*.c` | host-native C programs that include `src/proot/` and drive it with the system libc (sockets, `system()`, threads) | yes, each compiled and run |
 | `unit/check_core.c`, `unit/abi_layout.inc.h`, `unit/rt_quad_*` | sources used by `build.sh` and by integration tests (not tests by themselves) | no |
+| `unit/rt_libc_test.c` | source of `integration/rt_libc.sh`: the same program built against `host/rt/` and against the system libc must print the same (printf floats, sscanf floats, FILE modes, qsort, posix_memalign, a malloc stress) | no |
 | `integration/*.sh` | end to end (an x86_64 guest under `$OUT/pemu`) and static checks (no libc symbols, ABI layout ...). One argument: the build dir | yes, each |
 | `guests/` | programs the tests run as guests (and generators of guests) | - |
 | `data/` | expected outputs | - |

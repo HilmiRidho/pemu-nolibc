@@ -170,19 +170,22 @@ long long atoll(const char *s) { return strtoll(s, 0, 10); }
 int abs(int x) { return x < 0 ? -x : x; }
 long labs(long x) { return x < 0 ? -x : x; }
 
-void qsort(void *base, size_t n, size_t sz, int (*cmp)(const void *, const void *)) {     /* heap sort: no allocation, no recursion */
-    char *b = base, t[256]; if (sz > sizeof t || n < 2) return;
-#define RT_AT(i) (b + (i) * sz)
-    for (size_t i = n / 2; i-- > 0;) {
-        size_t r = i;
-        for (;;) { size_t c = 2 * r + 1; if (c >= n) break; if (c + 1 < n && cmp(RT_AT(c), RT_AT(c + 1)) < 0) c++; if (cmp(RT_AT(r), RT_AT(c)) >= 0) break; memcpy(t, RT_AT(r), sz); memcpy(RT_AT(r), RT_AT(c), sz); memcpy(RT_AT(c), t, sz); r = c; }
+static void rt_qswap(char *a, char *b, size_t n) {          /* swap two elements of any size, 64 bytes at a time */
+    char t[64];
+    while (n) { size_t m = n < sizeof t ? n : sizeof t; memcpy(t, a, m); memcpy(a, b, m); memcpy(b, t, m); a += m; b += m; n -= m; }
+}
+static void rt_qsift(char *b, size_t sz, int (*cmp)(const void *, const void *), size_t r, size_t n) {
+    for (;;) {
+        size_t c = 2 * r + 1; if (c >= n) break;
+        if (c + 1 < n && cmp(b + c * sz, b + (c + 1) * sz) < 0) c++;
+        if (cmp(b + r * sz, b + c * sz) >= 0) break;
+        rt_qswap(b + r * sz, b + c * sz, sz); r = c;
     }
-    for (size_t e = n; e-- > 1;) {
-        memcpy(t, RT_AT(0), sz); memcpy(RT_AT(0), RT_AT(e), sz); memcpy(RT_AT(e), t, sz);
-        size_t r = 0;
-        for (;;) { size_t c = 2 * r + 1; if (c >= e) break; if (c + 1 < e && cmp(RT_AT(c), RT_AT(c + 1)) < 0) c++; if (cmp(RT_AT(r), RT_AT(c)) >= 0) break; memcpy(t, RT_AT(r), sz); memcpy(RT_AT(r), RT_AT(c), sz); memcpy(RT_AT(c), t, sz); r = c; }
-    }
-#undef RT_AT
+}
+void qsort(void *base, size_t n, size_t sz, int (*cmp)(const void *, const void *)) {     /* heap sort: no allocation, no recursion, any element size */
+    char *b = base; if (n < 2 || !sz) return;
+    for (size_t i = n / 2; i-- > 0;) rt_qsift(b, sz, cmp, i, n);
+    for (size_t e = n; e-- > 1;) { rt_qswap(b, b + e * sz, sz); rt_qsift(b, sz, cmp, 0, e); }
 }
 
 /* ---- messages */
@@ -254,6 +257,7 @@ void *malloc(size_t n) {
 void free(void *p) {
     if (!p) return;
     rt_blk *b = (rt_blk *) p - 1;
+    if (b->cls == (size_t) -1) { p = (void *) b->sz; b = (rt_blk *) p - 1; }          /* an aligned alias made by posix_memalign: free the block behind it */
     if (!b->cls) { rt_raw(SYS_munmap, b, b->sz, 0, 0, 0, 0); return; }
     rt_lock(&rt_mlock); *(rt_blk **) p = rt_free[b->cls - 1]; rt_free[b->cls - 1] = b; rt_unlock(&rt_mlock);
 }
@@ -267,14 +271,26 @@ void *calloc(size_t a, size_t b) {
 void *realloc(void *p, size_t n) {
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
-    rt_blk *b = (rt_blk *) p - 1; size_t old = b->cls ? b->sz : b->sz - sizeof(rt_blk);
+    rt_blk *b = (rt_blk *) p - 1;
+    if (b->cls == (size_t) -1) {                              /* an aligned alias (posix_memalign): the usable size ends where the block behind it ends */
+        char *o = (char *) b->sz; rt_blk *ob = (rt_blk *) o - 1; size_t cap = ob->cls ? ob->sz : ob->sz - sizeof(rt_blk), ol = cap - (size_t) ((char *) p - o);
+        void *q = malloc(n); if (!q) return 0;
+        memcpy(q, p, ol < n ? ol : n); free(p); return q;
+    }
+    size_t old = b->cls ? b->sz : b->sz - sizeof(rt_blk);
     if (n <= old && (b->cls ? n > old / 2 || old <= 16 : n > old / 2)) return p;
     void *q = malloc(n); if (!q) return 0;
     memcpy(q, p, old < n ? old : n); free(p); return q;
 }
 int posix_memalign(void **out, size_t al, size_t n) {
+    if (al < sizeof(void *) || (al & (al - 1))) return EINVAL;                       /* a power of two, a multiple of sizeof(void *) */
     if (al <= 16) { void *p = malloc(n); if (!p) return ENOMEM; *out = p; return 0; }
-    return EINVAL;
+    if (al > (size_t) PTRDIFF_MAX / 2 || n > (size_t) PTRDIFF_MAX / 2) return ENOMEM;
+    char *raw = malloc(n + al + sizeof(rt_blk)); if (!raw) return ENOMEM;
+    /* the aligned pointer gets its own 16-byte header just below it: cls == -1 marks "alias", sz points at the real block (free / realloc follow it) */
+    unsigned long q = ((unsigned long) raw + sizeof(rt_blk) + al - 1) & ~(unsigned long) (al - 1);
+    rt_blk *h = (rt_blk *) q - 1; h->sz = (size_t) raw; h->cls = (size_t) -1;
+    *out = (void *) q; return 0;
 }
 char *strdup(const char *s) { size_t n = strlen(s) + 1; char *p = malloc(n); return p ? memcpy(p, s, n) : 0; }
 char *strndup(const char *s, size_t m) { size_t n = strnlen(s, m); char *p = malloc(n + 1); if (!p) return 0; memcpy(p, s, n); p[n] = 0; return p; }
