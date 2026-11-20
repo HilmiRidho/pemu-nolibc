@@ -1,0 +1,19 @@
+/* host/abi/include/float.h - libc-free header set (the compiler's predefined macros). SPDX-License-Identifier: Apache-2.0 */
+#ifndef PEMU_ABI_FLOAT_H
+#define PEMU_ABI_FLOAT_H
+#define FLT_MANT_DIG __FLT_MANT_DIG__
+#define DBL_MANT_DIG __DBL_MANT_DIG__
+#define LDBL_MANT_DIG __LDBL_MANT_DIG__
+#define FLT_MAX __FLT_MAX__
+#define FLT_MIN __FLT_MIN__
+#define FLT_EPSILON __FLT_EPSILON__
+#define DBL_MAX __DBL_MAX__
+#define DBL_MIN __DBL_MIN__
+#define DBL_EPSILON __DBL_EPSILON__
+#define LDBL_MAX __LDBL_MAX__
+#define LDBL_MIN __LDBL_MIN__
+#define LDBL_EPSILON __LDBL_EPSILON__
+#define DBL_MAX_EXP __DBL_MAX_EXP__
+#define LDBL_MAX_EXP __LDBL_MAX_EXP__
+#define FLT_RADIX 2
+#endif

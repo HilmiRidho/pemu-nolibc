@@ -1,0 +1,32 @@
+strict: write works
+strict: killed by SIGKILL: ok
+install without no_new_privs is EACCES: ok
+PR_SET_NO_NEW_PRIVS arg 0 is EINVAL: ok
+PR_SET_NO_NEW_PRIVS: ok
+PR_GET_SECCOMP before: 0: ok
+install: ok
+PR_GET_SECCOMP after: 2: ok
+GET_ACTION_AVAIL ERRNO: ok
+GET_ACTION_AVAIL USER_NOTIF is EOPNOTSUPP: ok
+NEW_LISTENER is EINVAL: ok
+getppid is EACCES: ok
+gettid is 0, not run: ok
+getpid runs: ok
+sigaction(SIGSYS): ok
+TRAP: the handler's result is the call's result: ok
+TRAP: handler ran once: ok
+TRAP: si_code is SYS_SECCOMP: ok
+TRAP: si_errno is the filter data: ok
+TRAP: si_syscall is getuid: ok
+TRAP: si_arch is x86_64: ok
+TRAP: si_call_addr is set: ok
+fork: the child runs the filter: ok
+exec: PR_GET_SECCOMP: ok
+exec: PR_GET_NO_NEW_PRIVS: ok
+exec: getppid is EACCES: ok
+exec: gettid is 0: ok
+exec: getpid runs: ok
+exec: getuid traps with no handler
+exec: the new image died of SIGSYS at getuid: ok
+KILL_PROCESS: the process dies of SIGSYS: ok
+RESULT: ok
