@@ -4,8 +4,19 @@
 #include <ctype.h>
 #include <limits.h>
 
-/* the compiler must not turn these loops back into calls to themselves */
+/* the compiler must not turn these loops back into calls to themselves.  gcc: the optimize attribute.  clang ignores that attribute (warning "unknown attribute
+ * 'optimize'") but its loop-idiom pass does the same rewrite (a copy / fill / strlen loop becomes a call to memcpy / memset / strlen, here inside memcpy / memset /
+ * strlen themselves: endless recursion, SIGSEGV at the first call; the Android NDK build is clang).  no_builtin without arguments: no library call is recognised
+ * or generated in this function. */
+#if defined(__clang__)
+#if __has_attribute(no_builtin)
+#define RT_NOPAT __attribute__((no_builtin))
+#else
+#define RT_NOPAT __attribute__((optnone))
+#endif
+#else
 #define RT_NOPAT __attribute__((optimize("no-tree-loop-distribute-patterns")))
+#endif
 
 typedef unsigned long long __attribute__((may_alias, aligned(1))) rt_u64u;
 typedef unsigned int __attribute__((may_alias, aligned(1))) rt_u32u;

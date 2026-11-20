@@ -47,7 +47,7 @@ struct rt_tcb {
 } __attribute__((aligned(16)));
 struct rt_thr { struct rt_thr *next; char *base; size_t size; struct rt_tcb *tcb; };
 
-static struct { Elf64_Addr img; size_t filesz, memsz, align; } rt_tls;     /* PT_TLS of this image */
+static struct { Elf64_Addr img, vaddr; size_t filesz, memsz, align; } rt_tls;     /* PT_TLS of this image */
 static size_t rt_tls_len(void) { size_t a = rt_tls.align ? rt_tls.align : 1; return (rt_tls.memsz + a - 1) & ~(a - 1); }
 
 #if defined(__x86_64__)
@@ -71,9 +71,13 @@ static struct rt_tcb *rt_tls_setup(char *mem, size_t len) {
     t = (struct rt_tcb *) tp; (void) len;
     char *blk = tp - tl;
 #else
-    t = (struct rt_tcb *) (((uintptr_t) mem + al - 1) & ~(uintptr_t) (al - 1));
-    char *blk = (char *) (t + 1) + 16 - 16;
-    blk = (char *) (((uintptr_t) blk + 16 + (rt_tls.align ? rt_tls.align : 1) - 1) & ~(uintptr_t) ((rt_tls.align ? rt_tls.align : 1) - 1));
+    /* variant I the way the linkers (GNU ld, lld, also for Android) bake it into the code: tp is aligned to the TLS alignment, the 16 bytes at tp are the
+     * TCB, the TLS block is at tp + 16 + ((p_vaddr - 16) & (align - 1)).  The old placement (align_up(tp + 16, align)) agrees only when align <= 16 and
+     * p_vaddr is a multiple of it: with a larger alignment (lld raises it on Android) every __thread variable lay on the wrong address. */
+    size_t A = rt_tls.align ? rt_tls.align : 1;
+    char *tp = (char *) (((uintptr_t) mem + sizeof(struct rt_tcb) + al - 1) & ~(uintptr_t) (al - 1));
+    t = (struct rt_tcb *) (tp - sizeof(struct rt_tcb));
+    char *blk = tp + 16 + (((size_t) rt_tls.vaddr - 16) & (A - 1));
     (void) len;
 #endif
     for (size_t i = 0; i < tl; i++) blk[i] = 0;
@@ -273,7 +277,7 @@ RT_ATTR_USED static void rt_start_c(long *sp) {
         else if (a->a_type == AT_SYSINFO_EHDR) rt_auxv_vdso = a->a_un.a_val;
     }
     for (size_t i = 0; ph && i < phn; i++)
-        if (ph[i].p_type == PT_TLS) { rt_tls.img = (Elf64_Addr) (base + ph[i].p_vaddr); rt_tls.filesz = ph[i].p_filesz; rt_tls.memsz = ph[i].p_memsz; rt_tls.align = ph[i].p_align; }
+        if (ph[i].p_type == PT_TLS) { rt_tls.img = (Elf64_Addr) (base + ph[i].p_vaddr); rt_tls.vaddr = ph[i].p_vaddr; rt_tls.filesz = ph[i].p_filesz; rt_tls.memsz = ph[i].p_memsz; rt_tls.align = ph[i].p_align; }
     size_t tot = (rt_tls_total() + 4095) & ~(size_t) 4095;
     char *m = (char *) rt_raw(SYS_mmap, 0, tot, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if ((unsigned long) m > (unsigned long) -4096L) _exit(127);
