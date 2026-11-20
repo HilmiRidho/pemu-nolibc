@@ -48,7 +48,11 @@ esac
 # __getauxval from a libc: not linked here.  Inline LL/SC atomics instead (the JIT picks its own LSE paths at run time).  Probed: x86_64 gcc has no such flag.
 NOOA=""
 echo 'int x;' | $CC -Werror -mno-outline-atomics -x c -c - -o /dev/null 2>/dev/null && NOOA="-mno-outline-atomics"
-LDS="-static-pie -fPIE -nostdlib -nostdinc -I$(pwd)/host/abi/include -U_FORTIFY_SOURCE -fno-math-errno -fno-stack-protector -falign-functions=64 -falign-jumps=16 $NOOA"
+# clang for Android API < 29 (the NDK default) emulates __thread through compiler-rt's emutls.c, which calls pthread_key_create / pthread_getspecific:
+# not linked here.  host/rt/ sets up real TLS itself (PT_TLS + the thread pointer, rt_tls_setup), so ask for native TLS.  Probed: gcc does not know the flag.
+NOET=""
+echo 'int x;' | $CC -Werror -fno-emulated-tls -x c -c - -o /dev/null 2>/dev/null && NOET="-fno-emulated-tls"
+LDS="-static-pie -fPIE -nostdlib -nostdinc -I$(pwd)/host/abi/include -U_FORTIFY_SOURCE -fno-math-errno -fno-stack-protector -falign-functions=64 -falign-jumps=16 $NOOA $NOET"
 # The compiler's runtime library: libgcc.a for gcc, libclang_rt.builtins-*.a for clang with compiler-rt (Android NDK has no libgcc.a, so -lgcc fails there).
 # Ask the compiler for its file; fall back to -lgcc when it names none that exists.
 MATH="-lgcc"
