@@ -1,0 +1,17 @@
+--- a/host/rt/rt_core.h	2026-11-20 09:21:53.526670229 +0000
++++ b/host/rt/rt_core.h	2026-11-20 09:21:53.650631573 +0000
+@@ -201,3 +201,3 @@
+ int main(int, char **);
+-extern const Elf64_Ehdr __ehdr_start __attribute__((visibility("hidden")));
++extern Elf64_Ehdr __ehdr_start __attribute__((visibility("hidden")));
+ extern Elf64_Dyn _DYNAMIC[] __attribute__((visibility("hidden")));
+@@ -207,3 +207,3 @@
+ static RT_NOINLINE RT_ATTR_USED void rt_relocate(void) {
+-    char *base = (char *) &__ehdr_start;
++    char *base = (char *) &__ehdr_start; __asm__ volatile("" : "+r"(base) :: "memory");
+     const Elf64_Rela *rela = 0; size_t sz = 0, ent = sizeof(Elf64_Rela);
+@@ -269,3 +269,3 @@
+     while (*e) e++;
+-    const Elf64_Phdr *ph = 0; size_t phn = 0; char *base = (char *) &__ehdr_start;
++    const Elf64_Phdr *ph = 0; size_t phn = 0; char *base = (char *) &__ehdr_start; __asm__ volatile("" : "+r"(base) :: "memory");
+     rt_auxv_all = (Elf64_auxv_t *) (e + 1);
