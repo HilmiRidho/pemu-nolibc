@@ -96,6 +96,9 @@ static void a_cset(int rd, int cc) { E(0x1A9F07E0u | (u32)(cc ^ 1) << 12 | (u32)
 /* loads and stores: size 0 b, 1 h, 2 w, 3 x;  opc 0 store, 1 load, 2 load sign-extended to x, 3 load sign-extended to w */
 static void a_ldst_u(int size, int opc, int rt, int rn, u32 off) { E((u32) size << 30 | 0x39000000u | (u32) opc << 22 | ((off >> size) & 0xfff) << 10 | (u32) rn << 5 | (u32) rt); }
 static void a_ldst_s(int size, int opc, int rt, int rn, int off) { E((u32) size << 30 | 0x38000000u | (u32) opc << 22 | ((u32) off & 0x1ff) << 12 | (u32) rn << 5 | (u32) rt); }
+static void a_ldst_pre(int size, int opc, int rt, int rn, int off) { E((u32) size << 30 | 0x38000C00u | (u32) opc << 22 | ((u32) off & 0x1ff) << 12 | (u32) rn << 5 | (u32) rt); }    /* str/ldr rt, [rn, #off]!  (rt != rn) */
+static void a_ldst_post(int size, int opc, int rt, int rn, int off) { E((u32) size << 30 | 0x38000400u | (u32) opc << 22 | ((u32) off & 0x1ff) << 12 | (u32) rn << 5 | (u32) rt); }   /* str/ldr rt, [rn], #off   (rt != rn) */
+static void a_addx(int rd, int rn, int rm, int opt, int sh) { E(0x8B200000u | (u32) rm << 16 | (u32) opt << 13 | (u32) sh << 10 | (u32) rn << 5 | (u32) rd); }   /* add xd, xn, wm/xm, <uxtb|uxth|uxtw|uxtx> #sh (opt 0..3, sh 0..4); rn, rd are not sp */
 static void a_stp(int rt, int rt2, int rn, int off) { E(0xA9000000u | ((u32)(off / 8) & 0x7f) << 15 | (u32) rt2 << 10 | (u32) rn << 5 | (u32) rt); }
 static void a_ldp(int rt, int rt2, int rn, int off) { E(0xA9400000u | ((u32)(off / 8) & 0x7f) << 15 | (u32) rt2 << 10 | (u32) rn << 5 | (u32) rt); }
 /* persistent cache (see tcg_target.inc.h): what a block emitted for it may reference outside itself */

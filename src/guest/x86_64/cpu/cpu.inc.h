@@ -74,7 +74,7 @@ enum { RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI };
 #define DF_ 0x400
 #define OF_ 0x800
 
-#define RSB_N 64
+#define RSB_N 256                                      /* the JIT indexes the ring with the low 8 bits of a free-running counter (add ..., uxtb #4): keep it 256 */
 typedef struct {
     u64 r[16];
     u64 rip, rf, fs, gs;

@@ -230,11 +230,13 @@ static void j_opst(int rt, const JI *j, int sz, int rb, int off) {
 }
 static void j_push(int rv) {                                    /* the store comes first: a fault leaves rsp unchanged */
     int hs = pin(RSP);
+    if (hs >= 0 && !g_jmt && rv != hs) { a_ldst_pre(3, 0, rv, hs, -8); return; }      /* str rv, [rsp, #-8]!: one instruction, and a faulting store does not write the base back */
     if (hs >= 0) { m_st(8, rv, hs, -8); a_addi(1, hs, hs, 8, 0); return; }
     c_ld(1, OFF_R(RSP)); a_addi(1, 1, 1, 8, 0); m_st(8, rv, 1, 0); c_st(1, OFF_R(RSP));
 }
 static void j_pop(int rv) {
     int hs = pin(RSP);
+    if (hs >= 0 && !g_jmt && rv != hs) { a_ldst_post(3, 1, rv, hs, 8); return; }      /* ldr rv, [rsp], #8 */
     if (hs >= 0) { m_ld(8, 0, 0, rv, hs, 0); a_addi(0, hs, hs, 8, 0); return; }
     c_ld(1, OFF_R(RSP)); m_ld(8, 0, 0, rv, 1, 0); a_addi(0, 1, 1, 8, 0); c_st(1, OFF_R(RSP));
 }
@@ -290,23 +292,24 @@ typedef struct { int kind; u32 *br[2]; u64 from, target; int fpend, fkind, fsz, 
 static JStub jstub[2 * JMAXI]; static int jnstub;
 static void jx_ret(void) {                              /* guest return address in x0: predicted by the return stack buffer, then the inline cache */
     if (!(g_jopt & JOPT_RSB)) { jx_indirect(); return; }
-    j_poll(1);
-    u32 *s1 = a_cbz_fwd(1, 1);                         /* signal pending: slow path polls again and leaves */
-    c_ld(2, OFF_RSBI); a_addi(1, 2, 2, 1, 0); a_andmask(2, 2, 6); c_st(2, OFF_RSBI);
-    a_addsh(3, RCPU, 2, 4); a_ldp(4, 30, 3, OFF_RSB);
+    /* The ring is indexed by the low 8 bits of a free-running counter (add ..., uxtb #4), so there is no mask to apply. A hit returns at once without polling: every
+     * loop has a backward branch or an indirect jump, which poll, and a pending signal is seen there. A miss goes through jx_indirect, which polls. */
+    c_ld(2, OFF_RSBI); a_addi(1, 2, 2, 1, 0); c_st(2, OFF_RSBI);
+    a_addx(3, RCPU, 2, 0, 4); a_ldp(4, 30, 3, OFF_RSB);
     a_addsub(1, 1, 1, 31, 4, 0);                       /* cmp x4, x0 */
     u32 *s2 = a_bcond_fwd(1);
     a_ret();                                           /* host ret: the CPU's own return predictor follows the bl of the call */
-    jpatch19(s1); jpatch19(s2);
+    jpatch19(s2);
+    a_addi(0, 2, 2, 1, 0); c_st(2, OFF_RSBI);          /* a miss: put the entry back, so a ret whose call pushed nothing (a call that is not inline) does not shift every ret below it */
     jx_indirect();
 }
 static void jrsb_push(u64 retaddr, u32 **adrsite, int x0_has_ret) {    /* uses x2-x5; *adrsite = adr of the host continuation, patched by the caller; x0_has_ret: 1 = x0 already holds retaddr, 2 = x4 does */
-    c_ld(2, OFF_RSBI); a_addsh(3, RCPU, 2, 4);
+    c_ld(2, OFF_RSBI); a_addx(3, RCPU, 2, 0, 4);
     if (x0_has_ret == 2) { }                            /* the caller left the return address in x4 */
     else if (x0_has_ret) a_mov(4, 0); else a_movia(4, retaddr);
     *adrsite = jcur; E(0);
     a_stp(4, 5, 3, OFF_RSB);
-    a_addi(0, 2, 2, 1, 0); a_andmask(2, 2, 6); c_st(2, OFF_RSBI);
+    a_addi(0, 2, 2, 1, 0); c_st(2, OFF_RSBI);
 }
 static void jstub_add(int kind, u32 *b0, u32 *b1, u64 from, u64 target, int live) {
     JStub *t = &jstub[jnstub++]; t->kind = kind; t->br[0] = b0; t->br[1] = b1; t->from = from; t->target = target; t->live = live;
@@ -1365,7 +1368,7 @@ static int jemit(const JI *j) {          /* returns 1 when it ended the block (t
         fl_flush(j->lvb);
         if (pin(RSP) >= 0) {
             int hs = pin(RSP);
-            m_ld(8, 0, 0, 0, hs, 0); a_addi(0, hs, hs, 8, 0);
+            j_pop(0);                                    /* ldr x0, [rsp], #8 when the guest has one thread */
             if (j->imm) { a_movi(2, j->imm); a_addsh(hs, hs, 2, 0); }
             jx_ret(); return 1;
         }
