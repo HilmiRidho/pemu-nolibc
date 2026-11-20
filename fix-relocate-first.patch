@@ -1,0 +1,33 @@
+--- a/host/rt/rt_core.h	2026-11-20 08:43:48.000000000 +0000
++++ b/host/rt/rt_core.h	2026-11-20 08:56:44.086514097 +0000
+@@ -202,7 +202,8 @@
+ extern const Elf64_Ehdr __ehdr_start __attribute__((visibility("hidden")));
+ extern Elf64_Dyn _DYNAMIC[] __attribute__((visibility("hidden")));
+ 
+-/* static-pie: nobody applies the relative relocations for us.  Runs first, uses no global pointer. */
++/* static-pie: nobody applies the relative relocations for us.  _start calls this BEFORE entering any other C function: the compiler may hoist a GOT load
++ * (memset / memcpy libcalls with -fno-plt, function pointers) above a call made from inside rt_start_c, and then it reads the GOT slot unrelocated (0). */
+ static RT_NOINLINE RT_ATTR_USED void rt_relocate(void) {
+     char *base = (char *) &__ehdr_start;
+     const Elf64_Rela *rela = 0; size_t sz = 0, ent = sizeof(Elf64_Rela);
+@@ -263,7 +264,7 @@
+ static void rt_run_fini(void) { for (void (**f)(void) = __fini_array_end; f > __fini_array_start;) (*--f)(); }
+ 
+ RT_ATTR_USED static void rt_start_c(long *sp) {
+-    rt_relocate();
++    /* rt_relocate() already ran, from _start (below), before any C code of this function */
+     int argc = (int) sp[0]; char **argv = (char **) (sp + 1), **envp = argv + argc + 1, **e = envp;
+     while (*e) e++;
+     const Elf64_Phdr *ph = 0; size_t phn = 0; char *base = (char *) &__ehdr_start;
+@@ -291,9 +292,9 @@
+     exit(main(argc, argv));
+ }
+ #if defined(__x86_64__)
+-__asm__(".text\n.global _start\n.type _start,@function\n_start:\n xor %ebp,%ebp\n mov %rsp,%rdi\n and $-16,%rsp\n call rt_start_c\n hlt\n");
++__asm__(".text\n.global _start\n.type _start,@function\n_start:\n xor %ebp,%ebp\n mov %rsp,%r12\n and $-16,%rsp\n call rt_relocate\n mov %r12,%rdi\n call rt_start_c\n hlt\n");
+ #elif defined(__aarch64__)
+-__asm__(".text\n.global _start\n.type _start,%function\n_start:\n mov x29,#0\n mov x30,#0\n mov x0,sp\n and sp,x0,#-16\n bl rt_start_c\n brk #0\n");
++__asm__(".text\n.global _start\n.type _start,%function\n_start:\n mov x29,#0\n mov x30,#0\n mov x19,sp\n and sp,x19,#-16\n bl rt_relocate\n mov x0,x19\n bl rt_start_c\n brk #0\n");
+ #endif
+ 
+ /* ------------------------------------------------------------------ fork */
